@@ -1,4 +1,5 @@
 use bytes::Bytes;
+use futures_util::future::try_join;
 use http::Method;
 use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt, Empty};
@@ -53,7 +54,7 @@ impl hyper::service::Service<Request<Incoming>> for Forward {
                     match hyper::upgrade::on(req).await {
                         Ok(upgraded) => {
                             if let Err(e) = tunnel(upgraded, target).await {
-                                eprintln!("server io error: {}", e);
+                                eprintln!("server io error: {:?}", e);
                             };
                         }
                         Err(e) => {
@@ -88,21 +89,28 @@ impl hyper::service::Service<Request<Incoming>> for Forward {
 fn empty() -> BoxBody<Bytes, hyper::Error> {
     Empty::<Bytes>::new().map_err(|x| match x {}).boxed()
 }
-// Open a tunnel over an upgrade-ready connection
-async fn tunnel(upgraded: Upgraded, addr: SocketAddr) -> crate::Result<()> {
+
+async fn tunnel(upgraded: Upgraded, addr: SocketAddr) -> std::io::Result<()> {
     // Connect to remote server
-    println!("Local cx upgraded, attempting to connect to {:?}", addr);
-    let mut server = TcpStream::connect(addr).await?;
-    println!("connected");
-    let mut upgraded = TokioIo::new(upgraded);
+    let server = TcpStream::connect(addr).await?;
+    let upgraded = TokioIo::new(upgraded);
+    let (mut server_rd, mut server_wr) = tokio::io::split(server);
+    let (mut client_rd, mut client_wr) = tokio::io::split(upgraded);
 
-    let (from_client, from_server) =
-        tokio::io::copy_bidirectional(&mut upgraded, &mut server).await?;
-
-    println!(
-        "client wrote {} bytes and received {} bytes",
-        from_client, from_server
-    );
+    // asynchronous copies on this thread
+    let up = tokio::io::copy(&mut client_rd, &mut server_wr);
+    let down = tokio::io::copy(&mut server_rd, &mut client_wr);
+    match tokio::try_join!(up, down) {
+        Ok((up_bytes, down_bytes)) => {
+            println!(
+                "client wrote {} bytes and received {} bytes",
+                up_bytes, down_bytes
+            );
+        }
+        Err(e) => {
+            println!("tunnel error: {}", e);
+        }
+    }
     Ok(())
 }
 
