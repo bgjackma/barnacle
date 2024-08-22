@@ -21,7 +21,7 @@ pub struct Forward {
 }
 
 impl Forward {
-    // attempt to resolve target by request IP or simple DNS
+    // Attempt to resolve target by request IP or simple DNS.
     pub async fn from_req(request: &Request<Incoming>) -> Result<Forward> {
         let Some(authority) = request.uri().authority() else {
             return Err(RouteError(request.uri().to_string()));
