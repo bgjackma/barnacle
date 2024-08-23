@@ -9,10 +9,11 @@ http = "1"
 http-body-util = "0.1"
 hyper = { version = "1", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
+pin-project-lite = "0.2"
 thiserror = "1"
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7" }
-tower = { version = "0.5" }
+tower = { version = "0.5", features = ["full"]}
 
 [[bin]]
 name = "barnacle"
