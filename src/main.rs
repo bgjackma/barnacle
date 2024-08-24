@@ -9,8 +9,7 @@ use tokio_util::sync::CancellationToken;
 pub async fn main() -> Result<()> {
     let addr = SocketAddr::from_str("127.0.0.1:8181").expect("a valid IP");
 
-    let service_fn = |()| service_fn(forward::forward);
-
+    // Setup shutdown
     let shutdown = CancellationToken::new();
     let shutdown_on_signal = shutdown.clone();
     tokio::spawn(async move {
@@ -18,8 +17,11 @@ pub async fn main() -> Result<()> {
         println!("Received shutdown signal...");
         shutdown_on_signal.cancel();
     });
+
+    // Run Server
+    let service_fn = |()| service_fn(forward::forward);
     tokio::select! {
-    res = listen_to(addr, service_fn) => {
+    res = listen_to(addr, service_fn, shutdown.clone()) => {
         if let Err(err) = res {
             println!("Error running server! {err}");
             println!("Shutting down...");
